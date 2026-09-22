@@ -9,7 +9,7 @@ from sklearn.neighbors import kneighbors_graph
 
 
 def encode_onehot(labels):
-    classes = set(labels)   
+    classes = sorted(set(labels))
     classes_dict = {c: np.identity(len(classes))[i, :] for i, c in
                     enumerate(classes)}
     labels_onehot = np.array(list(map(classes_dict.get, labels)),
@@ -32,8 +32,8 @@ def load_data(path):
     non_zero_indices = np.nonzero(labels)
     zero_indices=np.array(zero_indices)
     non_zero_indices=np.array(non_zero_indices)
-    classes = set(labels)
-    nclasses=max(classes)+1
+    classes = sorted(set(labels))
+    nclasses = len(classes)
     labels1=labels
     labels = encode_onehot(labels)   # Convert labels to one-hot encoding
 

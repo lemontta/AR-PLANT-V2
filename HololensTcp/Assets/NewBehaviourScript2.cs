@@ -29,66 +29,81 @@ using UnityEngine.UI;
 [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
 public class NewBehaviourScript2 : MonoBehaviour
 {
-    public static bool iscoloring = false;
-    public static bool tip = true;
-    public static int[] Tag;
-    public int tagmode = 1;
-    public int vessel = 1;//0=SOM
-    public static int colornum = 1;
-    public static int taggingmode = 1;
-    public static Color[] acolor = new Color[100];
-    public static bool b2_Sign = false;
-    int SOM_NUM = 1000;
-    private int[] SOM_List = new int[1000];
-    int local = 100;
+    // 这一段是脚本最上面的状态变量，类似 Python 里的全局变量/类属性。
+    // 这些变量在整个脚本里共享，所有方法都能访问。
+    // static 表示“静态成员”：整个项目共享同一份数据，而不是每个物体各有一份。
+    public static bool iscoloring = false;         // 是否正在进行点云染色
+    public static bool tip = true;                 // 是否显示提示
+    public static int[] Tag;                       // 每个点对应的标签编号，决定颜色类别
+    public int tagmode = 1;                       // 当前标记工具模式：球/立方体/圆柱
+    public int vessel = 1;                        // 0=SOM 方式，1=普通颜色/标记方式
+    public static int colornum = 1;               // 当前选中的颜色编号
+    public static int taggingmode = 1;            // 当前绘制/标记方式
+    public static Color[] acolor = new Color[100]; // 颜色表，给每个标签对应一种颜色
+    public static bool b2_Sign = false;           // 分解/恢复状态标志
 
-    private ObjectManipulator objectManipulator;
-    public  struct pcdData
+    // C# 的 int 是整数类型；这里表示 SOM 点的最大数量。
+    int SOM_NUM = 1000;
+    private int[] SOM_List = new int[1000]; // 保存可用于 SOM 的点索引
+    int local = 100; // 缩放系数，控制点云坐标大小
+
+    private ObjectManipulator objectManipulator; // Unity 交互组件：拖拽/旋转/缩放
+
+    // 结构体类似 Python 里的字典/数据类：把一组相关数据放在一个对象里。
+    public struct pcdData
     {
-        public float[] m_fX;
-        public float[] m_fY;
-        public float[] m_fZ;
-        public float[] m_fNorX;
-        public float[] m_fNorY;
-        public float[] m_fNorZ;
-        public float[] m_fCurvature;
-        public float[] m_label;
+        public float[] m_fX;       // 所有点的 X 坐标
+        public float[] m_fY;       // 所有点的 Y 坐标
+        public float[] m_fZ;       // 所有点的 Z 坐标
+        public float[] m_fNorX;    // 法向量 X 分量
+        public float[] m_fNorY;    // 法向量 Y 分量
+        public float[] m_fNorZ;    // 法向量 Z 分量
+        public float[] m_fCurvature; // 点的曲率
+        public float[] m_label;    // 每个点的标签值
     }
 
+    // PCD 文件头结构：保存点云文件开头的版本、字段、点数等信息。
     public struct PcdInfo
     {
-        public string m_strVerInfo;
-        public string m_strFileds;
-        public string m_strSize;
-        public string m_strType;
-        public string m_strCount;
-        public string m_strWidth;
-        public string m_strHeight;
-        public string m_strViewPoint;
-        public int m_nPoints;
-        public string m_points;
-        public string m_strData;
-        public pcdData m_pcdData;
+        public string m_strVerInfo;  // PCD 文件版本，例如 VERSION .7
+        public string m_strFileds;   // 字段定义，如 x y z label
+        public string m_strSize;     // 每个字段的大小
+        public string m_strType;     // 数据类型：F / I / U 等
+        public string m_strCount;    // 字段个数
+        public string m_strWidth;    // 点云宽度
+        public string m_strHeight;   // 点云高度
+        public string m_strViewPoint; // 视角信息
+        public int m_nPoints;        // 点云总点数
+        public string m_points;      // 点数字段字符串
+        public string m_strData;     // DATA 关键字
+        public pcdData m_pcdData;    // 实际存放点坐标和标签的数据
     }
 
 
 
-    //class PcdFileParser
-    // {
+    // 这是 PCD 文件解析器的核心头信息对象。
+    // m_pcdHeader 里存放所有点云头信息，后面从文件里读取数据时会填进去。
     public PcdInfo m_pcdHeader;
+
+    // 枚举类型：列出字段名字，方便访问和判断。类似 Python 里常量列表。
     public enum FiledNames { X, Y, Z, NorX, NorY, NorZ, Curvature };
 
+    // 这是一个空方法，可能是之前写到一半的解析器框架。
     public void PcdFileParser()
     {
     }
 
 
 
+    // 这个方法的功能是：读取某个 PCD 文件，然后把点云数据存到 m_pcdHeader 中。
+    // 逻辑上等同于 Python 里：打开文件 -> 读取每行 -> 解析成数组 -> 存入字典/结构体。
+    // public 表示可以被其他脚本调用，返回 bool 表示“成功/失败”。
     public bool LoadFile_Sphere(string strFile)
     {
-
-
+        // File.ReadAllLines：一次性把文件按行读出来，返回一个 string[] 数组。
         string[] strs = File.ReadAllLines(strFile);
+
+        // PCD 文件头通常前几行是固定格式：VERSION、FIELDS、SIZE、TYPE、COUNT、WIDTH、HEIGHT、VIEWPOINT...
         m_pcdHeader.m_strVerInfo = strs[0];
         m_pcdHeader.m_strFileds = strs[1];
         m_pcdHeader.m_strSize = strs[2];
@@ -98,9 +113,12 @@ public class NewBehaviourScript2 : MonoBehaviour
         m_pcdHeader.m_strHeight = strs[6];
         m_pcdHeader.m_strViewPoint = strs[8];
         m_pcdHeader.m_points = strs[7];
+
+        // 这里把点数写死成 10000-10，实际应该从 PCD 头中读取，比较容易出错。
         m_pcdHeader.m_nPoints = 10000-10;
         m_pcdHeader.m_strData = strs[9];
 
+        // 给 pcdData 结构体中的所有数组分配长度。
         m_pcdHeader.m_pcdData = new pcdData();
         m_pcdHeader.m_pcdData.m_fX = new float[m_pcdHeader.m_nPoints];
         m_pcdHeader.m_pcdData.m_fY = new float[m_pcdHeader.m_nPoints];
@@ -111,119 +129,151 @@ public class NewBehaviourScript2 : MonoBehaviour
         m_pcdHeader.m_pcdData.m_fNorY = new float[m_pcdHeader.m_nPoints];
         m_pcdHeader.m_pcdData.m_fNorZ = new float[m_pcdHeader.m_nPoints];
         m_pcdHeader.m_pcdData.m_fCurvature = new float[m_pcdHeader.m_nPoints];
+
+        // 这里开始从第 11 行读取真实点数据。
         int f = 0;
         for (int i = 11; i < m_pcdHeader.m_nPoints; i++)
         {
+            // 一行数据大概是：x y z label ...
             string[] data = strs[i+10].Split(' ');
+
+            // float.Parse 把字符串转成 float，类似 Python 的 float()
             m_pcdHeader.m_pcdData.m_fX[i] = float.Parse(data[0]);
             m_pcdHeader.m_pcdData.m_fY[i] = float.Parse(data[1]);
             m_pcdHeader.m_pcdData.m_fZ[i] = float.Parse(data[2]);
             m_pcdHeader.m_pcdData.m_label[i] = float.Parse(data[3]);
+
+            // 如果这行数据有第 5 个数，并且它大于 1，则认为它是 SOM 有效点。
             if (data.Length >= 5)
             {
                 if (float.Parse(data[4]) >= 1 )
                 {
-                    SOM_List[f] = i;
-                    f++;
+                    SOM_List[f] = i; // 记录这个点的索引
+                    f++;            // 索引计数+1
                 }
             }
-
-            
         }
 
+        // 初始化标签数组 Tag，长度等于点数。
         int num = m_pcdHeader.m_nPoints;
-
         Tag = new int[num];
 
         return true;
-
     }
 
 
 
+    // -------------------------------------------------------------------
+    // 把标签数组转换成 Unity 里的点云网格对象。
+    // 也就是：label -> 颜色类别 -> 生成多个小点 -> 组合成一个 mesh
+    // 这一步相当于 Python 里把一堆点“分组后画图”。
+    // -------------------------------------------------------------------
+    // 这个方法的作用是：根据标签数组 labels 创建一个完整的 3D 点云对象。
+    // 它会新建一个 GameObject，然后根据每个点的 label 分别绘制不同颜色。
     private void mesh_pointcloud(float[] labels)
     {
+        // 1) 创建一个父对象，用于承载这批点云。
         GameObject pointObj = new GameObject();
 
+        // 2) 如果还没着色成功，就命名为 "new"，否则命名为 "new1"。
+        //    这里相当于 Python 里 if/else 判断并赋值。
         if (TcpText.coloringsuccess == false) pointObj.name = "new"; else pointObj.name = "new1";
 
-
+        // 3) 设置这个父对象的初始位置。
         pointObj.transform.position = new Vector3(0, 1.8f, 0.5f);
 
+        // 4) 通过 GameObject.Find 找到真正的父节点。
         GameObject father ;
         if (TcpText.coloringsuccess == false)
             father = GameObject.Find("new");
         else
             father = GameObject.Find("new1");
 
+        // 5) 真正构建点云的逻辑，放在 mesh_creat 里。
         mesh_creat(labels, father, pointObj);
 
+        // 6) 给生成出来的对象添加 BoxCollider、交互组件、边界控制。
         pointObj.AddComponent<BoxCollider>();
         pointObj.AddComponent<ObjectManipulator>();
         pointObj.AddComponent<BoundsControl>();
 
-
-        // ��ȡĿ�������BoxCollider���
+        // 7) 获取 BoxCollider，用来确定物体的中心和尺寸。
         BoxCollider boxCollider = pointObj.GetComponent<BoxCollider>();
         Vector3 center = boxCollider.bounds.center;
         Vector3 size = boxCollider.bounds.extents;
 
-        // ����һ���ն���
+        // 8) 生成一个空对象，用作参考点或挂载点。
         GameObject newEmptyObject = new GameObject("EmptyObject");
-
-        // �������ɿն����λ��
         newEmptyObject.transform.position = new Vector3(0, 1.8f, 0.5f);
-
         newEmptyObject.transform.SetParent(father.transform);
-
     }
 
+    // 这个函数的核心思路是：
+    // 1. 统计每个 label 有多少个点；
+    // 2. 根据 label 分组；
+    // 3. 每一组用同一颜色渲染；
+    // 4. 把同一组的点合并成一个 Mesh，减少 DrawCall。
     private void mesh_creat(float[] labels, GameObject father, GameObject pointObj)
     {
+        // Dictionary 用来统计每个 label 出现了多少次，并记录哪些点属于它。
         Dictionary<float, int> labelCount = new Dictionary<float, int>();
         Dictionary<float, List<int>> labelIndices = new Dictionary<float, List<int>>();
-        // Iterate over the labels.
+
+        // 遍历所有标签，将点按 label 分类。
         for (int i = 0; i < labels.Length; i++)
         {
-            // If the label is not in the dictionary, add it.
             if (!labelCount.ContainsKey(labels[i]))
             {
                 labelCount[labels[i]] = 0;
                 labelIndices[labels[i]] = new List<int>();
             }
-            // Increase the count of the current label.
             labelCount[labels[i]]++;
             labelIndices[labels[i]].Add(i);
         }
+
+        // labelList 其实没有被真正用到，更多是说明一种统计过程。
         List<KeyValuePair<float, int>> labelList = new List<KeyValuePair<float, int>>(labelCount);
         int a = 0;
+
+        // 找到一个基础材质对象，用来复用渲染材质。
         GameObject ma;
         ma = GameObject.Find("11111");
         MeshRenderer mr = ma.GetComponent<MeshRenderer>();
+
+        // foreach 会按顺序逐个遍历每个 label 组。
         foreach (KeyValuePair<float, int> label in labelCount)
         {
-
-            int g = (int)label.Key;
+            int g = (int)label.Key;  // 把标签值转换成 int，作为颜色索引
             Color newColor = acolor[g];
 
-            GameObject importedPrefab1 = Resources.Load("��") as GameObject;
+            // 资源名是 "点"，在 Assets/Resources 目录下 exists，因此可以加载。
+            // GameObject importedPrefab1 = Resources.Load("点") as GameObject;
             List<int> indices = labelIndices[label.Key];
 
+            // 当前 label 对应的点构成一个合并数组。
             CombineInstance[] combineInstances = new CombineInstance[label.Value];
             for (int i = 0; i < label.Value; ++i)
             {
-
-                GameObject prefab = Resources.Load("��") as GameObject;
+                GameObject prefab = Resources.Load("点") as GameObject;
                 MeshFilter prefabMesh = prefab.GetComponent<MeshFilter>();
-                Vector3 xyz = new Vector3(m_pcdHeader.m_pcdData.m_fX[indices[i]], m_pcdHeader.m_pcdData.m_fY[indices[i]], m_pcdHeader.m_pcdData.m_fZ[indices[i]]) /local;
+                Vector3 xyz = new Vector3(
+                    m_pcdHeader.m_pcdData.m_fX[indices[i]], 
+                    m_pcdHeader.m_pcdData.m_fY[indices[i]], 
+                    m_pcdHeader.m_pcdData.m_fZ[indices[i]]
+                    ) /local;
                 combineInstances[i].mesh = prefabMesh.sharedMesh;
-                combineInstances[i].transform = Matrix4x4.TRS(xyz, Quaternion.identity, new Vector3(0.0012f, 0.0012f, 0.0012f));
-
+                combineInstances[i].transform = Matrix4x4.TRS(
+                    xyz, 
+                    Quaternion.identity, 
+                    new Vector3(0.0012f, 0.0012f, 0.0012f));
             }
 
+            // 合成一个新的 Mesh，把同一组点统一渲染。
             Mesh newMesh = new Mesh();
             newMesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
             newMesh.CombineMeshes(combineInstances);
+
+            // 新建一个 GameObject 表示该类别的点云层。
             GameObject combinedObject = new GameObject("label_" + label.Key.ToString());
             combinedObject.transform.position = father.transform.position;
             combinedObject.transform.SetParent(father.transform);
@@ -232,10 +282,15 @@ public class NewBehaviourScript2 : MonoBehaviour
             combinedObject.GetComponent<MeshRenderer>().material.color = newColor;
 
             a += label.Value;
-
         }
     }
 
+    // -------------------------------------------------------------------
+    // 这个版本用于“修改颜色后重新生成点云”，即先删掉旧对象，再画新对象。
+    // Python 里等价于：先 pop，再重新 append。
+    // -------------------------------------------------------------------
+    // 此函数用于“颜色更新后重建点云”。
+    // 它和 mesh_creat 很类似，但会先删掉旧模型，再重新生成当前标签分组的网格。
     private void mesh_pointcloud_change(float[] labels)
     {
         Dictionary<float, int> labelCount = new Dictionary<float, int>();
@@ -246,48 +301,44 @@ public class NewBehaviourScript2 : MonoBehaviour
         else
             father = GameObject.Find("new1");
 
-        // Iterate over the labels.
+        // 先对 labels 做一次分组统计。
         for (int i = 0; i < labels.Length; i++)
         {
-            // If the label is not in the dictionary, add it.
             if (!labelCount.ContainsKey(labels[i]))
             {
                 labelCount[labels[i]] = 0;
                 labelIndices[labels[i]] = new List<int>();
             }
-            // Increase the count of the current label.
             labelCount[labels[i]]++;
             labelIndices[labels[i]].Add(i);
         }
 
         GameObject ma = GameObject.Find("11111");
         MeshRenderer mr = ma.GetComponent<MeshRenderer>();
-
         Vector3 fatherscale = father.transform.localScale;
 
+        // 遍历每个标签，生成新 mesh，并删除旧 mesh。
         foreach (KeyValuePair<float, int> label in labelCount)
         {
-            // Check and destroy old objects
             GameObject oldObject = GameObject.Find("label_" + label.Key.ToString());
             if (oldObject != null)
             {
                 MeshFilter oldMeshFilter = oldObject.GetComponent<MeshFilter>();
                 if (oldMeshFilter != null && oldMeshFilter.mesh != null)
                 {
-                    DestroyImmediate(oldMeshFilter.mesh); // �������پɵ� Mesh
+                    DestroyImmediate(oldMeshFilter.mesh); // 立即销毁旧的 Mesh
                 }
-                DestroyImmediate(oldObject); // �������پɵ� GameObject
+                DestroyImmediate(oldObject); // 立即销毁旧的 GameObject
             }
 
             int g = (int)label.Key;
             Color newColor = acolor[g];
-
             List<int> indices = labelIndices[label.Key];
 
             CombineInstance[] combineInstances = new CombineInstance[label.Value];
             for (int i = 0; i < label.Value; ++i)
             {
-                GameObject prefab = Resources.Load("��") as GameObject;
+                GameObject prefab = Resources.Load("点") as GameObject;
                 MeshFilter prefabMesh = prefab.GetComponent<MeshFilter>();
                 Vector3 xyz = new Vector3(m_pcdHeader.m_pcdData.m_fX[indices[i]] * fatherscale.x, m_pcdHeader.m_pcdData.m_fY[indices[i]] * fatherscale.y, m_pcdHeader.m_pcdData.m_fZ[indices[i]] * fatherscale.z) /local;
                 combineInstances[i].mesh = prefabMesh.sharedMesh;
@@ -307,7 +358,7 @@ public class NewBehaviourScript2 : MonoBehaviour
             combinedObject.GetComponent<MeshRenderer>().material.color = newColor;
         }
 
-        // �ֶ�������������
+        // 强制清理垃圾，释放不再使用的资源。
         System.GC.Collect();
         Resources.UnloadUnusedAssets();
     }
@@ -321,32 +372,32 @@ public class NewBehaviourScript2 : MonoBehaviour
 
     void Start()
     {
-        // ���� 20 �̶ֹ�����ɫ
+        // 定义 20 种固定颜色。
         Color[] fixedColors = new Color[]
         {
         Color.red,
         Color.green,
         Color.blue,
-        new Color(1f, 0.5f, 0f), // ��ɫ
-        new Color(0.5f, 0f, 0.5f), // ��ɫ
+        new Color(1f, 0.5f, 0f), // 橙色
+        new Color(0.5f, 0f, 0.5f), // 紫色
         Color.yellow,
-        new Color(0f, 0.5f, 1f), // ����ɫ
-        new Color(0.5f, 1f, 0f), // ǳ��ɫ
-        new Color(0.5f, 0.5f, 0f), // ���ɫ
-        new Color(1f, 0f, 0.5f), // ��ɫ
-        new Color(0f, 0.5f, 0.5f), // ��ɫ
-        new Color(0.5f, 0f, 1f), // ����ɫ
-        new Color(1f, 1f, 0f), // ����
-        new Color(0.75f, 0.75f, 0.75f), // ��ɫ
-        new Color(0.25f, 0.25f, 0.25f), // ���
-        new Color(1f, 0.5f, 0.25f), // �Ⱥ�ɫ
-        new Color(0.5f, 0.25f, 0f), // ��ɫ
-        new Color(0.25f, 1f, 0.5f), // ����ɫ
-        new Color(0.5f, 0.5f, 1f), // ����ɫ
-        new Color(1f, 0.75f, 0f) // ��ɫ
+        new Color(0f, 0.5f, 1f), // 天蓝色
+        new Color(0.5f, 1f, 0f), // 浅绿色
+        new Color(0.5f, 0.5f, 0f), // 橄榄色
+        new Color(1f, 0f, 0.5f), // 粉色
+        new Color(0f, 0.5f, 0.5f), // 青色
+        new Color(0.5f, 0f, 1f), // 深紫色
+        new Color(1f, 1f, 0f), // 明黄
+        new Color(0.75f, 0.75f, 0.75f), // 灰色
+        new Color(0.25f, 0.25f, 0.25f), // 深灰
+        new Color(1f, 0.5f, 0.25f), // 橙红色
+        new Color(0.5f, 0.25f, 0f), // 棕色
+        new Color(0.25f, 1f, 0.5f), // 淡绿色
+        new Color(0.5f, 0.5f, 1f), // 淡蓝色
+        new Color(1f, 0.75f, 0f) // 金色
         };
 
-        // ���̶�����ɫ��䵽 acolor ����
+        // 将固定颜色循环填充到 acolor 数组。
         for (int a = 0; a < acolor.Length; a++)
         {
             acolor[a] = fixedColors[a % fixedColors.Length];
@@ -399,7 +450,7 @@ public class NewBehaviourScript2 : MonoBehaviour
         boundscontrol= GameObject.Find("new").GetComponent<BoundsControl>();
         if (boxCollider != null)
         {
-            // �ر�BoxCollider����ײ���
+            // 关闭 BoxCollider 的碰撞检测。
             boxCollider.enabled = !boxCollider.enabled;
             boundscontrol.enabled= !boundscontrol.enabled;
         }
@@ -463,7 +514,7 @@ public class NewBehaviourScript2 : MonoBehaviour
 
     private void colorChange_mesh(int[] a) 
     {
-
+        // int[] 是整数数组；这里转换成 float[]，以复用点云重建方法。
         float[] floatArray = new float[a.Length];
 
         for (int i = 0; i < a.Length; i++)
@@ -478,7 +529,7 @@ public class NewBehaviourScript2 : MonoBehaviour
 
     public void Tagging(Vector3 xyz_l,float r_l,Vector3 qiu_size_l)
     {
-
+        // 参数由调用者传入：点的位置、半径，以及立方体/圆柱体的尺寸。
         float distance;
         Vector3 xyz_R = xyz_l;
 
@@ -493,6 +544,7 @@ public class NewBehaviourScript2 : MonoBehaviour
         {
             Vector3 xyz = new Vector3(m_pcdHeader.m_pcdData.m_fX[i] * z, m_pcdHeader.m_pcdData.m_fZ[i] * z, m_pcdHeader.m_pcdData.m_fY[i] * z) /local;
             distance = Vector3.Distance(xyz, xyz_R);
+            // == 用于比较；= 用于赋值，这是 C# 和 Python 都很重要的区别。
             if (taggingmode == 1) if (distance < r) Tag[i] = colornum;
             if (taggingmode == 0)
             {
@@ -525,7 +577,7 @@ public class NewBehaviourScript2 : MonoBehaviour
         float r_l = sphere.GetComponent<Transform>().localScale.x;
         Vector3 qiu_size_l = sphere.GetComponent<Transform>().localScale;
 
-        // ������һ���ű��е�Tagging����
+        // 调用本脚本中的 Tagging 方法。
        Tagging(xyz_l, r_l, qiu_size_l);
     }
 
@@ -544,7 +596,7 @@ public class NewBehaviourScript2 : MonoBehaviour
                 return result;
             }
         }
-        return null; // ���û���ҵ�������null
+        return null; // 没有找到时返回 null；null 表示“没有对象”。
     }
 
     public void colornumchange()
@@ -557,7 +609,7 @@ public class NewBehaviourScript2 : MonoBehaviour
         }
         */
         GameObject parent1 = GameObject.Find("changecolor"); 
-        //GameObject child = FindChildByName(parent1, "Cylinder"); // �������ChildName�滻������Ӷ��������
+        //GameObject child = FindChildByName(parent1, "Cylinder"); // 可以按实际子对象名称修改。
         GameObject child = parent1.transform.GetChild(0).GetChild(1).gameObject;
         child.GetComponent<Renderer>().material.color = acolor[colornum];
         if(GameObject.Find("Sphere"))
@@ -594,7 +646,7 @@ public class NewBehaviourScript2 : MonoBehaviour
         if (GameObject.Find("Sphere"))
         {
             Destroy(GameObject.Find("Sphere"));
-            var objCube = GameObject.CreatePrimitive(PrimitiveType.Cube);//����
+            var objCube = GameObject.CreatePrimitive(PrimitiveType.Cube);// 创建立方体。
             objCube.name = "Sphere";
             objCube.transform.position = new Vector3(0, 1.8f, 0.5f);
             objCube.transform.localScale = new Vector3(0.1f, 0.1f, 0.1f);
@@ -610,7 +662,7 @@ public class NewBehaviourScript2 : MonoBehaviour
         if (GameObject.Find("Sphere"))
         {
             Destroy(GameObject.Find("Sphere"));
-            var objCube = GameObject.CreatePrimitive(PrimitiveType.Sphere);//����
+            var objCube = GameObject.CreatePrimitive(PrimitiveType.Sphere);// 创建球体。
             objCube.name = "Sphere";
             objCube.transform.position = new Vector3(0, 1.8f, 0.5f);
             objCube.transform.localScale = new Vector3(0.1f, 0.1f, 0.1f);
@@ -626,7 +678,7 @@ public class NewBehaviourScript2 : MonoBehaviour
         if (GameObject.Find("Sphere"))
         {
             Destroy(GameObject.Find("Sphere"));
-            var objCube = GameObject.CreatePrimitive(PrimitiveType.Cylinder);//����
+            var objCube = GameObject.CreatePrimitive(PrimitiveType.Cylinder);// 创建圆柱体。
             objCube.name = "Sphere";
             objCube.transform.position = new Vector3(0, 1.8f, 0.5f);
             objCube.transform.localScale = new Vector3(0.1f, 0.1f, 0.1f);
@@ -693,7 +745,7 @@ public class NewBehaviourScript2 : MonoBehaviour
             {
                 //Debug.Log(SOM_List[i]);
                 Vector3 P_List = new Vector3(m_pcdHeader.m_pcdData.m_fX[SOM_List[i]], m_pcdHeader.m_pcdData.m_fY[SOM_List[i]], m_pcdHeader.m_pcdData.m_fZ[SOM_List[i]]) / local;
-                GameObject importedPrefab = Resources.Load("��") as GameObject;
+                GameObject importedPrefab = Resources.Load("球") as GameObject;
                 importedPrefab = Instantiate(importedPrefab);
                 importedPrefab.name=i.ToSafeString();
                 importedPrefab.GetComponent<Transform>().position = P_List+ Cube_father.GetComponent<Transform>().position;
@@ -707,7 +759,8 @@ public class NewBehaviourScript2 : MonoBehaviour
 
 
 
-    public void SaveToPcd()//����PCD
+    // 把当前标签写回 PCD 文件。void 表示这个方法不返回结果。
+    public void SaveToPcd()// 保存 PCD
     {
 
         string strDir = Application.persistentDataPath;
@@ -760,7 +813,7 @@ public class NewBehaviourScript2 : MonoBehaviour
             {
                 //Debug.Log(SOM_List[i]);
                 Vector3 P_List = new Vector3(m_pcdHeader.m_pcdData.m_fX[SOM_List[i]], m_pcdHeader.m_pcdData.m_fY[SOM_List[i]], m_pcdHeader.m_pcdData.m_fZ[SOM_List[i]]) / local;
-                GameObject importedPrefab = Resources.Load("��") as GameObject;
+                GameObject importedPrefab = Resources.Load("球") as GameObject;
                 importedPrefab = Instantiate(importedPrefab);
                 importedPrefab.name = i.ToSafeString();
                 importedPrefab.GetComponent<Transform>().position = P_List + Cube_father.GetComponent<Transform>().position;
